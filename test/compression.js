@@ -681,18 +681,44 @@ describe('compression()', function () {
     it('should call the passed callbacks in the order passed when compressing', function (done) {
       var hasCallbacks = false
       var callbackOutput = []
+      var errorsCaught = 0
       var server = createServer(null, function (req, res) {
         hasCallbacks = (http.OutgoingMessage.prototype.write.length === 3 && http.OutgoingMessage.prototype.end.length === 3)
         res.setHeader('Content-Type', 'text/plain')
-        res.write('Hello', null, function () {
-          callbackOutput.push(0)
-        })
-        res.write(' World', null, function () {
-          callbackOutput.push(1)
-        })
-        res.end(null, null, function () {
-          callbackOutput.push(2)
-        })
+        try {
+          res.write('Hello', null, function () {
+            callbackOutput.push(0)
+          })
+        } catch(error) {
+          errorsCaught++
+          if (hasCallbacks || error.message !== "compression, request.write does not support callback") {
+            throw error;
+          }
+          res.write('Hello');
+        }
+        try {
+          res.write(' World', null, function () {
+            callbackOutput.push(1)
+          })
+        } catch(error) {
+          errorsCaught++
+          if (hasCallbacks || error.message !== "compression, request.write does not support callback") {
+            throw error;
+          }
+          res.write(' World')
+        }
+        try {
+          res.end(null, null, function () {
+            callbackOutput.push(2)
+          })
+        } catch(error) {
+          errorsCaught++
+          console.log(error)
+          if (hasCallbacks || error.message !== "compression, request.end does not support callback") {
+            throw error;
+          }
+          res.end()
+        }
       })
 
       request(server)
@@ -709,6 +735,7 @@ describe('compression()', function () {
         } else {
           // nodejs 0.10 zlib has callbacks but OutgoingMessage doesn't, assert that no callbacks were made
           assert.equal(callbackOutput.length, 0)
+          assert.equal(errorsCaught, 3)
         }
         done()
       })
@@ -717,19 +744,44 @@ describe('compression()', function () {
     it('should call the passed callbacks in the order passed when not compressing', function (done) {
       var hasCallbacks = false
       var callbackOutput = []
+      var errorsCaught = 0
       var server = createServer(null, function (req, res) {
         hasCallbacks = (http.OutgoingMessage.prototype.write.length === 3 && http.OutgoingMessage.prototype.end.length === 3)
         res.setHeader('Cache-Control', 'no-transform')
         res.setHeader('Content-Type', 'text/plain')
-        res.write('hello,', null, function () {
-          callbackOutput.push(0)
-        })
-        res.write(' world', null, function () {
-          callbackOutput.push(1)
-        })
-        res.end(null, null, function () {
-          callbackOutput.push(2)
-        })
+        try {
+          res.write('hello,', null, function () {
+            callbackOutput.push(0)
+          })
+        } catch(error) {
+          errorsCaught++
+          if (hasCallbacks || error.message !== "compression, request.write does not support callback") {
+            throw error;
+          }
+          res.write('Hello');
+        }
+        try {
+          res.write(' world', null, function () {
+            callbackOutput.push(1)
+          })
+        } catch(error) {
+          errorsCaught++
+          if (hasCallbacks || error.message !== "compression, request.write does not support callback") {
+            throw error;
+          }
+          res.write(' world');
+        }
+        try {
+          res.end(null, null, function () {
+            callbackOutput.push(2)
+          })
+        } catch(error) {
+          errorsCaught++
+          if (hasCallbacks || error.message !== "compression, request.end does not support callback") {
+            throw error;
+          }
+          res.end();
+        }
       })
 
       request(server)
@@ -746,6 +798,7 @@ describe('compression()', function () {
           assert.deepEqual(callbackOutput, [0, 1, 2])
         } else {
           assert.equal(callbackOutput.length, 0)
+          assert.equal(errorsCaught, 3)
         }
         done()
       })

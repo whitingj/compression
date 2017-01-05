@@ -36,7 +36,6 @@ module.exports.filter = shouldCompress
  */
 
 var cacheControlNoTransformRegExp = /(?:^|,)\s*?no-transform\s*?(?:,|$)/
-var nodeHasCallbacks = (http.OutgoingMessage.prototype.write.length === 3 && http.OutgoingMessage.prototype.end.length === 3)
 
 /**
  * Compress response data with gzip / deflate.
@@ -67,6 +66,9 @@ function compression (options) {
     var _on = res.on
     var _write = res.write
 
+    var writeHasCallback = (_write.length == 3)
+    var endHasCallback = (_end.length == 3)
+
     // flush
     res.flush = function flush () {
       if (stream) {
@@ -81,18 +83,26 @@ function compression (options) {
         return false
       }
 
+      if (!writeHasCallback && cb !== undefined) {
+        throw new Error("compression, request.write does not support callback")
+      }
+
       if (!this._header) {
         this._implicitHeader()
       }
 
       return stream
-        ? stream.write(new Buffer(chunk, encoding), nodeHasCallbacks ? cb : undefined)
-        : _write.call(this, chunk, encoding, nodeHasCallbacks ? cb : undefined)
+        ? stream.write(new Buffer(chunk, encoding), cb)
+        : _write.call(this, chunk, encoding, cb)
     }
 
     res.end = function end (chunk, encoding, cb) {
       if (ended) {
         return false
+      }
+
+      if (!endHasCallback && cb !== undefined) {
+        throw new Error("compression, request.end does not support callback")
       }
 
       if (!this._header) {
@@ -105,7 +115,7 @@ function compression (options) {
       }
 
       if (!stream) {
-        return _end.call(this, chunk, encoding, nodeHasCallbacks ? cb : undefined)
+        return _end.call(this, chunk, encoding, cb)
       }
 
       // mark ended
@@ -113,8 +123,8 @@ function compression (options) {
 
       // write Buffer for Node.js 0.8
       return chunk
-        ? stream.end(new Buffer(chunk, encoding), nodeHasCallbacks ? cb : undefined)
-        : stream.end(null, null, nodeHasCallbacks ? cb : undefined)
+        ? stream.end(new Buffer(chunk, encoding), cb)
+        : stream.end(null, null, cb)
     }
 
     res.on = function on (type, listener) {
